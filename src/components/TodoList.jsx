@@ -1,16 +1,16 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { FaHeart, FaRegHeart } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { todoApi } from "../api/todos";
-import axios from "axios";
 
 export default function TodoList() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
   const {
     data: todos,
     error,
     isPending,
-    refetch,
   } = useQuery({
     queryKey: ["todos"],
     queryFn: async () => {
@@ -19,28 +19,28 @@ export default function TodoList() {
     },
   });
 
-  // TODO: 아래 handleLike 로 구현되어 있는 부분을 useMutation 으로 리팩터링 해보세요. 모든 기능은 동일하게 동작해야 합니다.
-  const queryClient = useQueryClient();
-  const handleLike = useMutation(
-    (id, currentLiked) => axios.delete("/todos/${id}"),
+  const mutation = useMutation(
+    ({ id, currentLiked }) =>
+      todoApi.patch(`/todos/${id}`, { liked: !currentLiked }),
     {
-      onSuccess: () => {
-        const previousTodos = [...todos];
+      onMutate: async ({ id, currentLiked }) => {
+        await queryClient.cancelQueries(["todos"]);
+        const previousTodos = queryClient.getQueryData(["todos"]);
+
         queryClient.setQueryData(["todos"], (prev) =>
           prev.map((todo) =>
             todo.id === id ? { ...todo, liked: !todo.liked } : todo
           )
         );
-        todoApi.patch(`/todos/${id}`, {
-          liked: !currentLiked,
-        });
+
+        return { previousTodos };
       },
-      onError: (err) => {
+      onError: (err, variables, context) => {
         console.error(err);
-        queryClient.setQueryData(["todos"], previousTodos);
+        queryClient.setQueryData(["todos"], context.previousTodos);
       },
       onSettled: () => {
-        refetch();
+        queryClient.invalidateQueries(["todos"]);
       },
     }
   );
@@ -74,12 +74,16 @@ export default function TodoList() {
             </button>
             {todo.liked ? (
               <FaHeart
-                onClick={() => handleLike(todo.id, todo.liked)}
+                onClick={() =>
+                  mutation.mutate({ id: todo.id, currentLiked: todo.liked })
+                }
                 style={{ cursor: "pointer" }}
               />
             ) : (
               <FaRegHeart
-                onClick={() => handleLike(todo.id, todo.liked)}
+                onClick={() =>
+                  mutation.mutate({ id: todo.id, currentLiked: todo.liked })
+                }
                 style={{ cursor: "pointer" }}
               />
             )}
