@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 export default function Home() {
   // TODO: useQuery 로 리팩터링 하세요.
   const { data, error, isLoading, refetch } = useQuery({
-    queryKey: "todos",
+    queryKey: ["todos"],
     queryFn: () => todoApi.get("/todos").then((response) => response.data),
   });
 
